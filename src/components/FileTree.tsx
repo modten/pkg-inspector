@@ -133,13 +133,16 @@ function TreeNodeItem({
 
         {/* Icon */}
         {node.isDir ? (
-          <svg className="w-4 h-4 flex-shrink-0 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-            {isExpanded ? (
-              <path d="M2 6a2 2 0 012-2h4l2 2h6a2 2 0 012 2v1H4a2 2 0 00-2 2v4a2 2 0 01-2-2V6z" />
-            ) : (
-              <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
-            )}
-          </svg>
+          isExpanded ? (
+            <svg className="w-4 h-4 flex-shrink-0 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.906 9c.382 0 .749.057 1.094.162V9a3 3 0 00-3-3h-3.879a.75.75 0 01-.53-.22L11.47 3.66A2.25 2.25 0 009.879 3H6a3 3 0 00-3 3v3.162A3.756 3.756 0 014.094 9h15.812z" />
+              <path fillRule="evenodd" d="M4.094 10.5a2.25 2.25 0 00-2.227 2.568l.857 6A2.25 2.25 0 004.951 21H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-2.227-2.568H4.094zM10 14a.75.75 0 000 1.5h4a.75.75 0 000-1.5h-4z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 flex-shrink-0 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z" />
+            </svg>
+          )
         ) : (
           <svg className="w-4 h-4 flex-shrink-0 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
