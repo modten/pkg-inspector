@@ -2,6 +2,7 @@ import type { ParsedFile } from "../types";
 
 interface FilePreviewProps {
   file: ParsedFile | null;
+  loading?: boolean;
 }
 
 function formatSize(bytes: number): string {
@@ -10,7 +11,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function FilePreview({ file }: FilePreviewProps) {
+export function FilePreview({ file, loading }: FilePreviewProps) {
   if (!file) {
     return (
       <div className="flex items-center justify-center h-full text-gray-600 text-sm">
@@ -27,14 +28,42 @@ export function FilePreview({ file }: FilePreviewProps) {
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700 text-sm flex-shrink-0">
         <span className="text-gray-300 font-mono truncate">{file.path}</span>
-        <span className="text-gray-500 text-xs ml-4 flex-shrink-0">
-          {formatSize(file.size)}
-        </span>
+        <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+          {loading && (
+            <span className="text-blue-400 text-xs">Loading...</span>
+          )}
+          <span className="text-gray-500 text-xs">
+            {formatSize(file.size)}
+          </span>
+        </div>
       </div>
 
       {/* Content area */}
       <div className="flex-1 overflow-auto">
-        {file.isBinary ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+            <svg
+              className="w-5 h-5 mr-2 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+            Loading file content...
+          </div>
+        ) : file.isBinary ? (
           <div className="flex items-center justify-center h-full text-gray-500 text-sm">
             Binary file &mdash; preview not available
           </div>

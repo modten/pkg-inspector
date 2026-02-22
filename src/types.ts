@@ -6,10 +6,27 @@ export interface ParsedFile {
   isDir: boolean;
   content: string;
   isBinary: boolean;
+  /** When true, content is not yet loaded (lazy mode). */
+  lazy?: boolean;
 }
 
 export interface ParseResult {
   files: ParsedFile[];
+}
+
+// ===== File index for lazy-loading mode =====
+
+export interface FileIndexEntry {
+  path: string;
+  size: number;
+  isDir: boolean;
+  isBinary: boolean;
+  /** Byte offset within the uncompressed tar blob */
+  offset: number;
+}
+
+export interface IndexResult {
+  files: FileIndexEntry[];
 }
 
 // ===== Package metadata (unified across ecosystems) =====

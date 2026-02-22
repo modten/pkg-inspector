@@ -45,13 +45,12 @@ make clean        # Remove build artifacts
 │  ┌──────────────────┐    ┌────────────────────────┐ │
 │  │    React App      │───▶│    Go WASM Module      │ │
 │  │    (Vite)         │    │                        │ │
-│  │  - SearchBar      │    │  - Decompress gzip    │ │
-│  │  - FileTree       │◀───│  - Parse tar archive  │ │
-│  │  - FilePreview    │    │  - Return files+content│ │
-│  │  - PackageInfo    │    └────────────────────────┘ │
-│  └──────┬────────────┘                               │
-│         │ fetch (direct or via CORS proxy)            │
-│         ▼                                            │
+│  │  - SearchBar      │    │  - fetch() via JS      │ │
+│  │  - FileTree       │◀───│  - Stream decompress   │ │
+│  │  - FilePreview    │    │  - Parse tar archive   │ │
+│  │  - PackageInfo    │    │  - On-demand file read │ │
+│  └──────────────────┘    └────────────────────────┘ │
+│                                                      │
 │    registry.npmjs.org / proxy.golang.org / ...       │
 └─────────────────────────────────────────────────────┘
 ```
@@ -82,14 +81,14 @@ Plugin Manager
 pkg-inspector/
 ├── wasm/
 │   └── tgz-parser/              # Go WASM source for tar.gz parsing
-│       ├── main.go              #   Exports __wasm_parseTgz to JS global
+│       ├── main.go              #   Exports WASM functions (see below)
 │       └── go.mod
 ├── src/
 │   ├── main.tsx                 # React entry point
 │   ├── App.tsx                  # Main app component (state + orchestration)
 │   ├── index.css                # Tailwind entry (@import "tailwindcss")
-│   ├── types.ts                 # Shared types: ParsedFile, PackageInfo, RegistryAdapter
-│   ├── wasm.d.ts                # Type declarations for Go's wasm_exec.js
+│   ├── types.ts                 # Shared types: ParsedFile, FileIndexEntry, PackageInfo, RegistryAdapter
+│   ├── wasm.d.ts                # Type declarations for Go WASM exports
 │   ├── components/
 │   │   ├── SearchBar.tsx        # Ecosystem dropdown + package name input + Inspect button
 │   │   ├── FileTree.tsx         # Recursive file tree with expand/collapse
@@ -97,14 +96,15 @@ pkg-inspector/
 │   │   ├── PackageInfo.tsx      # Metadata card (name, version, deps, scripts, etc.)
 │   │   └── Loading.tsx          # Multi-step loading indicator
 │   ├── hooks/
-│   │   └── useWasm.ts           # WASM initialization + parseTgz wrapper
+│   │   └── useWasm.ts           # WASM initialization + parseTgz/fetchAndParseTgz/indexTgz wrappers
 │   ├── registries/              # Plugin directory
 │   │   ├── index.ts             #   Registry list + lookup
 │   │   └── npm.ts               #   npm adapter (implemented)
 │   └── lib/
-│       └── cors.ts              # CORS proxy with automatic fallback
+│       ├── cors.ts              # CORS proxy with automatic fallback
+│       └── tar-store.ts         # Lazy-loading tar archive manager (Blob + index)
 ├── public/
-│   ├── tgz-parser.wasm          # Compiled Go WASM (3.4 MB)
+│   ├── tgz-parser.wasm          # Compiled Go WASM (3.5 MB)
 │   └── wasm_exec.js             # Go official WASM glue code
 ├── index.html
 ├── vite.config.ts
@@ -115,13 +115,35 @@ pkg-inspector/
 
 ## How It Works
 
+The data pipeline uses two modes depending on tarball size:
+
+### Eager mode (tarballs < 5 MB)
+
 1. User selects an ecosystem (npm) and enters a package name
 2. The app fetches package metadata from the registry API
-3. The tarball is downloaded as an `ArrayBuffer`
-4. The `Uint8Array` is passed to the Go WASM module (`__wasm_parseTgz`)
-5. Go decompresses gzip and parses the tar archive in-browser
-6. Results are returned as JSON: file paths, sizes, and text content
-7. React renders the file tree, metadata card, and file previewer
+3. Go WASM calls `fetch()` internally via `syscall/js` and streams the response body through `ReadableStream.getReader()`
+4. Gzip decompression and tar parsing happen incrementally as chunks arrive — the full tarball never exists as a single buffer
+5. Results are returned as JSON: file paths, sizes, and text content
+6. React renders the file tree, metadata card, and file previewer
+
+### Lazy mode (tarballs >= 5 MB)
+
+1. Steps 1-2 are the same; a HEAD request determines the tarball size
+2. Go WASM fetches and decompresses the archive, streaming the raw uncompressed tar data back to JS via `onChunk()` callbacks
+3. JS accumulates chunks into a `Blob` (backed by browser memory, not the JS heap)
+4. Go simultaneously builds a file index recording each file's byte offset within the tar
+5. Only `package.json` (or the ecosystem's metadata file) is eagerly loaded
+6. When the user clicks a file, `Blob.slice(offset, size)` extracts just that file's bytes, which Go processes for binary detection and returns the content
+7. Loaded files are cached in React state — clicking the same file twice doesn't re-read from the Blob
+
+### WASM Exports
+
+| Function | Signature | Purpose |
+|---|---|---|
+| `__wasm_parseTgz` | `(Uint8Array) -> Promise<string>` | Original: parse from in-memory bytes (drag-and-drop, etc.) |
+| `__wasm_fetchAndParseTgz` | `(url) -> Promise<string>` | Eager: fetch + stream-decompress + parse, no JS ArrayBuffer copy |
+| `__wasm_indexTgz` | `(url, onChunk) -> Promise<string>` | Lazy: fetch + decompress + stream tar to JS + build file index |
+| `__wasm_readFileFromTar` | `(blob, offset, size) -> Promise<string>` | Lazy: read a single file from the uncompressed tar Blob |
 
 ## CORS Strategy
 
@@ -247,11 +269,13 @@ CORS:      ✗ all endpoints
 
 ## Key Design Decisions
 
-1. **Two WASM modules** (tgz + zip) loaded on demand rather than one monolithic binary, keeping initial load small
-2. **CORS proxy with fallback** — npm and Go Modules are CORS-friendly and connect directly; others route through configurable proxies
-3. **Ecosystem-agnostic UI** — all components render from the unified `ParsedFile[]` and `PackageInfo` types, no ecosystem-specific UI code
-4. **Binary detection** — files are checked for null bytes and invalid UTF-8 in the first 512 bytes; files >512KB skip content extraction entirely
-5. **Static deployment** — the entire `dist/` output is pure static files deployable to GitHub Pages, Netlify, Vercel, or any CDN
+1. **WASM-side HTTP fetching** — Go calls `fetch()` via `syscall/js` and reads the response as a `ReadableStream`, eliminating the JS-side full-tarball `ArrayBuffer` copy. This avoids importing `net/http` which would inflate the binary from ~3.5 MB to ~10 MB
+2. **Two-mode loading** — Packages under 5 MB are fully extracted in one pass (eager). Packages over 5 MB use lazy loading: decompress once to a Blob, build an index, and serve file content on demand via `Blob.slice()`. This keeps memory bounded for large packages like `typescript` (11 MB tarball)
+3. **Two WASM modules** (tgz + zip) loaded on demand rather than one monolithic binary, keeping initial load small
+4. **CORS proxy with fallback** — npm and Go Modules are CORS-friendly and connect directly; others route through configurable proxies
+5. **Ecosystem-agnostic UI** — all components render from the unified `ParsedFile[]` and `PackageInfo` types, no ecosystem-specific UI code
+6. **Binary detection** — files are checked for null bytes and invalid UTF-8 in the first 512 bytes; files >512KB skip content extraction entirely
+7. **Static deployment** — the entire `dist/` output is pure static files deployable to GitHub Pages, Netlify, Vercel, or any CDN
 
 ## License
 

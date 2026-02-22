@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type {
   ParsedFile,
   PackageInfo,
@@ -7,6 +7,8 @@ import type {
   LoadingStep,
 } from "./types";
 import { useWasm } from "./hooks/useWasm";
+import { TarStore } from "./lib/tar-store";
+import { corsProxy } from "./lib/cors";
 import { SearchBar } from "./components/SearchBar";
 import { FileTree } from "./components/FileTree";
 import { FilePreview } from "./components/FilePreview";
@@ -14,8 +16,17 @@ import { PackageInfoPanel } from "./components/PackageInfo";
 import { Loading } from "./components/Loading";
 import { registries } from "./registries";
 
+/** Tarball size threshold for lazy loading (5 MB). */
+const LAZY_THRESHOLD = 5 * 1024 * 1024;
+
 export default function App() {
-  const { ready: wasmReady, loading: wasmLoading, error: wasmError, parseTgz } = useWasm();
+  const {
+    ready: wasmReady,
+    loading: wasmLoading,
+    error: wasmError,
+    fetchAndParseTgz,
+    indexTgz,
+  } = useWasm();
 
   const [status, setStatus] = useState<AppStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -24,17 +35,53 @@ export default function App() {
   const [selectedFile, setSelectedFile] = useState<ParsedFile | null>(null);
   const [packageInfo, setPackageInfo] = useState<PackageInfo | null>(null);
   const [inspectedName, setInspectedName] = useState("");
+  const [fileLoading, setFileLoading] = useState(false);
+
+  // TarStore ref for lazy mode — persists across renders, cleaned up on new search.
+  const tarStoreRef = useRef<TarStore | null>(null);
 
   const updateStep = useCallback(
     (index: number, done: boolean) => {
-      setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, done } : s)));
+      setSteps((prev) =>
+        prev.map((s, i) => (i === index ? { ...s, done } : s))
+      );
     },
     []
   );
 
+  /**
+   * Resolve the tarball URL, applying CORS proxy if needed.
+   */
+  const resolveUrl = useCallback(
+    (tarballUrl: string, registry: RegistryAdapter): string => {
+      return registry.archiveNeedsCors ? corsProxy(tarballUrl) : tarballUrl;
+    },
+    []
+  );
+
+  /**
+   * Check tarball size via HEAD request to decide eager vs lazy path.
+   * Returns content-length in bytes, or 0 if unavailable.
+   */
+  const getTarballSize = useCallback(async (url: string): Promise<number> => {
+    try {
+      const res = await fetch(url, { method: "HEAD" });
+      const cl = res.headers.get("content-length");
+      return cl ? parseInt(cl, 10) : 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
   const handleSearch = useCallback(
     async (registry: RegistryAdapter, name: string) => {
-      if (!parseTgz) return;
+      if (!fetchAndParseTgz || !indexTgz) return;
+
+      // Clean up previous lazy store.
+      if (tarStoreRef.current) {
+        tarStoreRef.current.dispose();
+        tarStoreRef.current = null;
+      }
 
       setStatus("loading");
       setError(null);
@@ -42,11 +89,11 @@ export default function App() {
       setSelectedFile(null);
       setPackageInfo(null);
       setInspectedName(name);
+      setFileLoading(false);
 
       const loadingSteps: LoadingStep[] = [
         { label: "Fetching package info...", done: false },
-        { label: "Downloading archive...", done: false },
-        { label: "Parsing contents...", done: false },
+        { label: "Downloading & parsing archive...", done: false },
       ];
       setSteps(loadingSteps);
 
@@ -55,24 +102,52 @@ export default function App() {
         const pkgInfo = await registry.fetchPackageInfo(name);
         updateStep(0, true);
 
-        // Step 2: Download the archive
-        const archiveData = await registry.fetchArchive(
-          pkgInfo.name,
-          pkgInfo.version,
-          pkgInfo.tarballUrl
-        );
-        updateStep(1, true);
+        const url = resolveUrl(pkgInfo.tarballUrl, registry);
 
-        // Step 3: Parse with WASM
-        const result = await parseTgz(archiveData);
-        updateStep(2, true);
+        // Determine eager vs lazy path based on tarball size.
+        const tarballSize = await getTarballSize(url);
+        const useLazy = tarballSize > LAZY_THRESHOLD;
 
-        // Extract metadata from parsed files
-        const metadata = registry.extractMetadata(result.files);
+        if (useLazy) {
+          // --- Lazy path (Phase 2): index only, load files on demand ---
+          const { index, store } = await indexTgz(url);
+          tarStoreRef.current = store;
+          updateStep(1, true);
 
-        setFiles(result.files);
-        setPackageInfo(metadata);
-        setStatus("success");
+          const lazyFiles = store.toFiles(index.files);
+
+          // Extract metadata — need to eagerly load the metadata file.
+          const metaFile = lazyFiles.find(
+            (f) =>
+              !f.isDir &&
+              (f.path === "package/" + registry.metaFileName ||
+                f.path.endsWith("/" + registry.metaFileName)) &&
+              f.path.split("/").length <= 2
+          );
+
+          if (metaFile && metaFile.lazy) {
+            const { content, isBinary } = await store.readFile(metaFile.path);
+            metaFile.content = content;
+            metaFile.isBinary = isBinary;
+            metaFile.lazy = false;
+          }
+
+          const metadata = registry.extractMetadata(lazyFiles);
+
+          setFiles(lazyFiles);
+          setPackageInfo(metadata);
+          setStatus("success");
+        } else {
+          // --- Eager path (Phase 1): fetch + parse everything in WASM ---
+          const result = await fetchAndParseTgz(url);
+          updateStep(1, true);
+
+          const metadata = registry.extractMetadata(result.files);
+
+          setFiles(result.files);
+          setPackageInfo(metadata);
+          setStatus("success");
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "An unexpected error occurred"
@@ -80,7 +155,49 @@ export default function App() {
         setStatus("error");
       }
     },
-    [parseTgz, updateStep]
+    [fetchAndParseTgz, indexTgz, updateStep, resolveUrl, getTarballSize]
+  );
+
+  /**
+   * Handle file selection — in lazy mode, load content on demand.
+   */
+  const handleSelectFile = useCallback(
+    async (file: ParsedFile) => {
+      if (file.lazy && tarStoreRef.current) {
+        setSelectedFile({ ...file, content: "" });
+        setFileLoading(true);
+
+        try {
+          const { content, isBinary } = await tarStoreRef.current.readFile(
+            file.path
+          );
+          const loadedFile: ParsedFile = {
+            ...file,
+            content,
+            isBinary,
+            lazy: false,
+          };
+          setSelectedFile(loadedFile);
+
+          // Update the file in the files array so it's cached for re-selection.
+          setFiles((prev) =>
+            prev.map((f) => (f.path === file.path ? loadedFile : f))
+          );
+        } catch (err) {
+          setSelectedFile({
+            ...file,
+            content: `Error loading file: ${err instanceof Error ? err.message : String(err)}`,
+            isBinary: false,
+            lazy: false,
+          });
+        } finally {
+          setFileLoading(false);
+        }
+      } else {
+        setSelectedFile(file);
+      }
+    },
+    []
   );
 
   const isLoading = status === "loading";
@@ -180,13 +297,13 @@ export default function App() {
                   <FileTree
                     files={files}
                     selectedPath={selectedFile?.path ?? null}
-                    onSelectFile={setSelectedFile}
+                    onSelectFile={handleSelectFile}
                   />
                 </div>
 
                 {/* File preview (right panel) */}
                 <div className="flex-1 overflow-hidden bg-gray-900">
-                  <FilePreview file={selectedFile} />
+                  <FilePreview file={selectedFile} loading={fileLoading} />
                 </div>
               </div>
             </div>
