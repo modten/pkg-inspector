@@ -120,21 +120,31 @@ function TreeNodeItem({
       >
         {/* Chevron / spacer */}
         {node.isDir ? (
-          <span className="w-4 text-gray-500 text-xs flex-shrink-0">
-            {isExpanded ? "\u25BC" : "\u25B6"}
-          </span>
+          <svg
+            className={`w-3 h-3 flex-shrink-0 text-gray-500 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+          </svg>
         ) : (
-          <span className="w-4 flex-shrink-0" />
+          <span className="w-3 flex-shrink-0" />
         )}
 
         {/* Icon */}
-        <span className="flex-shrink-0 text-xs">
-          {node.isDir ? (
-            <span className="text-yellow-400">{isExpanded ? "\uD83D\uDCC2" : "\uD83D\uDCC1"}</span>
-          ) : (
-            <span className="text-gray-500">\uD83D\uDCC4</span>
-          )}
-        </span>
+        {node.isDir ? (
+          <svg className="w-4 h-4 flex-shrink-0 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+            {isExpanded ? (
+              <path d="M2 6a2 2 0 012-2h4l2 2h6a2 2 0 012 2v1H4a2 2 0 00-2 2v4a2 2 0 01-2-2V6z" />
+            ) : (
+              <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+            )}
+          </svg>
+        ) : (
+          <svg className="w-4 h-4 flex-shrink-0 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+          </svg>
+        )}
 
         {/* Name */}
         <span className="truncate flex-1">{node.name}</span>
