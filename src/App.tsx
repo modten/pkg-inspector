@@ -203,9 +203,9 @@ export default function App() {
   const isLoading = status === "loading";
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       {/* Top bar */}
-      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-10">
+      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur flex-shrink-0 z-10">
         <div className="max-w-screen-2xl mx-auto px-4 py-3">
           <div className="flex items-center gap-4 mb-3">
             <h1 className="text-lg font-bold text-gray-100 tracking-tight whitespace-nowrap">
@@ -239,7 +239,7 @@ export default function App() {
 
       {/* Main content */}
       {wasmReady && (
-        <main className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-hidden min-h-0">
           {/* Idle state */}
           {status === "idle" && (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-600 gap-4 px-4">
@@ -282,16 +282,16 @@ export default function App() {
 
           {/* Success state */}
           {status === "success" && (
-            <div className="flex-1 flex flex-col overflow-hidden max-w-screen-2xl mx-auto w-full">
-              {/* Package info bar */}
+            <div className="flex-1 flex flex-col min-h-0 max-w-screen-2xl mx-auto w-full">
+              {/* Package info bar — collapsible, flex-shrink-0 so it keeps its height */}
               {packageInfo && (
-                <div className="px-4 py-3 border-b border-gray-800">
+                <div className="px-4 py-2 flex-shrink-0">
                   <PackageInfoPanel info={packageInfo} />
                 </div>
               )}
 
-              {/* File explorer */}
-              <div className="flex-1 flex overflow-hidden">
+              {/* File explorer — takes all remaining vertical space */}
+              <div className="flex-1 flex min-h-0 border-t border-gray-800">
                 {/* File tree (left panel) */}
                 <div className="w-72 xl:w-80 border-r border-gray-800 overflow-auto flex-shrink-0 bg-gray-900/50">
                   <FileTree
