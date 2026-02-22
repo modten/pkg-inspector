@@ -95,9 +95,9 @@ export const npmAdapter: RegistryAdapter = {
           typeof pkg.repository === "string"
             ? pkg.repository
             : pkg.repository?.url ?? "",
-        dependencies: pkg.dependencies ?? {},
-        devDependencies: pkg.devDependencies ?? {},
-        scripts: pkg.scripts ?? {},
+        dependencies: (typeof pkg.dependencies === "object" && pkg.dependencies) ? pkg.dependencies : {},
+        devDependencies: (typeof pkg.devDependencies === "object" && pkg.devDependencies) ? pkg.devDependencies : {},
+        scripts: (typeof pkg.scripts === "object" && pkg.scripts) ? pkg.scripts : {},
         metadata: {
           main: pkg.main,
           module: pkg.module,

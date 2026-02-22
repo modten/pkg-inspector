@@ -16,7 +16,12 @@ export function PackageInfoPanel({ info }: PackageInfoProps) {
   const depCount = Object.keys(info.dependencies).length;
   const devDepCount = Object.keys(info.devDependencies).length;
   const scriptCount = Object.keys(info.scripts).length;
-  const keywords = (info.metadata.keywords as string[]) ?? [];
+  const rawKeywords = info.metadata.keywords;
+  const keywords: string[] = Array.isArray(rawKeywords)
+    ? rawKeywords
+    : typeof rawKeywords === "string"
+      ? rawKeywords.split(/,\s*/)
+      : [];
   const peerDeps = (info.metadata.peerDependencies as Record<string, string>) ?? {};
   const peerDepCount = Object.keys(peerDeps).length;
 
