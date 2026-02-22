@@ -13,23 +13,6 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Chevron icon that rotates when expanded. */
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
-      viewBox="0 0 20 20"
-      fill="currentColor"
-    >
-      <path
-        fillRule="evenodd"
-        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-}
-
 export function PackageInfoPanel({ info }: PackageInfoProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -42,20 +25,15 @@ export function PackageInfoPanel({ info }: PackageInfoProps) {
     : typeof rawKeywords === "string"
       ? rawKeywords.split(/,\s*/)
       : [];
-  const peerDeps = (info.metadata.peerDependencies as Record<string, string>) ?? {};
+  const peerDeps =
+    (info.metadata.peerDependencies as Record<string, string>) ?? {};
   const peerDepCount = Object.keys(peerDeps).length;
 
   return (
     <div className="bg-gray-800/50 border border-gray-700 rounded-lg overflow-hidden">
-      {/* Summary row — always visible, clickable to toggle */}
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-800/50 transition-colors cursor-pointer"
-      >
-        <ChevronIcon expanded={expanded} />
-
-        {/* Name + version + license */}
+      {/* Header row — always visible */}
+      <div className="flex items-center gap-3 px-4 py-2.5">
+        {/* Left: package identity */}
         <span className="font-semibold text-gray-100 text-sm">{info.name}</span>
         <span className="text-xs text-blue-400 font-mono">v{info.version}</span>
         {info.license && (
@@ -63,30 +41,44 @@ export function PackageInfoPanel({ info }: PackageInfoProps) {
             {info.license}
           </span>
         )}
-
-        {/* Dep counts as small badges */}
         {depCount > 0 && (
-          <span className="text-xs text-gray-500">
-            {depCount} deps
-          </span>
+          <span className="text-xs text-gray-500">{depCount} deps</span>
         )}
         {devDepCount > 0 && (
-          <span className="text-xs text-gray-500">
-            {devDepCount} dev
-          </span>
+          <span className="text-xs text-gray-500">{devDepCount} dev</span>
         )}
 
-        {/* Description — truncated */}
+        {/* Description (truncated, shown on wider screens) */}
         {info.description && (
-          <span className="text-xs text-gray-500 truncate ml-auto max-w-sm hidden lg:inline">
+          <span className="text-xs text-gray-500 truncate hidden lg:inline flex-1 ml-2">
             {info.description}
           </span>
         )}
-      </button>
+
+        {/* Collapse / Expand toggle button */}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="ml-auto flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 bg-gray-700/60 hover:bg-gray-700 px-2.5 py-1 rounded transition-colors cursor-pointer flex-shrink-0"
+        >
+          {expanded ? "Collapse" : "Expand"}
+          <svg
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      </div>
 
       {/* Expanded details */}
       {expanded && (
-        <div className="px-4 pb-4 pt-1 border-t border-gray-700/50 max-h-64 overflow-auto space-y-4">
+        <div className="px-4 pb-4 pt-2 border-t border-gray-700/50 max-h-64 overflow-auto space-y-4">
           {/* Description (full) */}
           {info.description && (
             <p className="text-sm text-gray-400">{info.description}</p>
@@ -138,17 +130,20 @@ export function PackageInfoPanel({ info }: PackageInfoProps) {
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
             {typeof info.metadata.main === "string" && (
               <span>
-                main: <code className="text-gray-400">{info.metadata.main}</code>
+                main:{" "}
+                <code className="text-gray-400">{info.metadata.main}</code>
               </span>
             )}
             {typeof info.metadata.module === "string" && (
               <span>
-                module: <code className="text-gray-400">{info.metadata.module}</code>
+                module:{" "}
+                <code className="text-gray-400">{info.metadata.module}</code>
               </span>
             )}
             {typeof info.metadata.types === "string" && (
               <span>
-                types: <code className="text-gray-400">{info.metadata.types}</code>
+                types:{" "}
+                <code className="text-gray-400">{info.metadata.types}</code>
               </span>
             )}
           </div>
