@@ -296,7 +296,7 @@ export default function App() {
                 scroll independently within this container.
                 14rem ~= header(~5rem) + package info collapsed(~3.5rem) + padding(~5.5rem)
               */}
-              <div className="flex min-h-0 flex-1 max-h-[calc(100vh-14rem)] mx-4 mb-4 rounded-lg overflow-hidden border border-gray-700">
+              <div className="flex min-h-80 flex-1 max-h-[calc(100vh-14rem)] mx-4 mb-4 rounded-lg overflow-hidden border border-gray-700">
                 {/* File tree (left panel) */}
                 <div className="w-72 xl:w-80 border-r border-gray-800 overflow-auto flex-shrink-0 bg-gray-900/50">
                   <FileTree
