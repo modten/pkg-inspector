@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+/*
+ * Shiki syntax highlighting overrides.
+ * Ensure highlighted code blends with the existing dark theme layout.
+ */
+.shiki-code span {
+  /* Shiki sets color via inline styles; just ensure no stray overrides */
+  font-style: inherit;
+}

@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import type { ParsedFile } from "../types";
+import { useHighlighter } from "../hooks/useHighlighter";
 
 interface FilePreviewProps {
   file: ParsedFile | null;
@@ -12,6 +14,17 @@ function formatSize(bytes: number): string {
 }
 
 export function FilePreview({ file, loading }: FilePreviewProps) {
+  const { highlightedLines } = useHighlighter(
+    file && !loading ? file : null
+  );
+
+  const lines = useMemo(
+    () => (file?.content ? file.content.split("\n") : []),
+    [file?.content]
+  );
+
+  const lineNumberWidth = String(lines.length).length;
+
   if (!file) {
     return (
       <div className="flex items-center justify-center h-full text-gray-600 text-sm">
@@ -19,9 +32,6 @@ export function FilePreview({ file, loading }: FilePreviewProps) {
       </div>
     );
   }
-
-  const lines = file.content ? file.content.split("\n") : [];
-  const lineNumberWidth = String(lines.length).length;
 
   return (
     <div className="flex flex-col h-full">
@@ -79,9 +89,20 @@ export function FilePreview({ file, loading }: FilePreviewProps) {
             </div>
 
             {/* Code content */}
-            <pre className="flex-1 px-4 py-3 overflow-x-auto text-gray-300 whitespace-pre">
-              {file.content}
-            </pre>
+            {highlightedLines ? (
+              <pre className="flex-1 px-4 py-3 overflow-x-auto whitespace-pre shiki-code">
+                {highlightedLines.map((lineHtml, i) => (
+                  <div
+                    key={i}
+                    dangerouslySetInnerHTML={{ __html: lineHtml || "&nbsp;" }}
+                  />
+                ))}
+              </pre>
+            ) : (
+              <pre className="flex-1 px-4 py-3 overflow-x-auto text-gray-300 whitespace-pre">
+                {file.content}
+              </pre>
+            )}
           </div>
         )}
       </div>
