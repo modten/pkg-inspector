@@ -10,8 +10,8 @@ import { getRegistryUrl, getCorsFlags } from "../lib/settings";
 export const pypiAdapter: RegistryAdapter = {
   id: "pypi",
   label: "PyPI",
-  placeholder: "Enter package name, e.g. requests, flask, numpy",
-  examples: ["requests", "flask", "numpy", "django"],
+  placeholder: "Enter package name, e.g. six, click, idna",
+  examples: ["six", "click", "toml", "idna"],
   parserType: "tgz",
   metaFileName: "PKG-INFO",
 

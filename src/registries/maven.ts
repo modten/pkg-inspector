@@ -14,7 +14,7 @@ function parseGAV(input: string): { groupId: string; artifactId: string } {
   const parts = input.split(":");
   if (parts.length < 2 || !parts[0] || !parts[1]) {
     throw new Error(
-      `Invalid Maven coordinate "${input}". Expected format: groupId:artifactId (e.g. com.google.guava:guava)`,
+      `Invalid Maven coordinate "${input}". Expected format: groupId:artifactId (e.g. org.slf4j:slf4j-api)`,
     );
   }
   return { groupId: parts[0], artifactId: parts[1] };
@@ -24,11 +24,11 @@ export const mavenAdapter: RegistryAdapter = {
   id: "maven",
   label: "Maven",
   placeholder:
-    "Enter groupId:artifactId, e.g. com.google.guava:guava",
+    "Enter groupId:artifactId, e.g. org.slf4j:slf4j-api",
   examples: [
-    "com.google.guava:guava",
-    "org.apache.commons:commons-lang3",
-    "junit:junit",
+    "org.slf4j:slf4j-api",
+    "com.google.code.gson:gson",
+    "javax.annotation:javax.annotation-api",
   ],
   parserType: "zip",
   metaFileName: "pom.xml",

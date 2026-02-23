@@ -8,10 +8,11 @@ interface CorsProxyConfig {
 }
 
 const BUILTIN_CORS_PROXIES: CorsProxyConfig[] = [
-  { prefix: "https://proxy.corsfix.com/?", encode: false },
-  { prefix: "https://whateverorigin.org/get?url=", encode: true },
-  { prefix: "https://corsproxy.io/?url=", encode: true },
-  { prefix: "https://api.allorigins.win/raw?url=", encode: true },
+  { prefix: "https://pkg-inspector-cors-proxy.vercel.app?url=", encode: false },
+  // { prefix: "https://proxy.corsfix.com/?", encode: false },
+  // { prefix: "https://whateverorigin.org/get?url=", encode: true },
+  // { prefix: "https://corsproxy.io/?url=", encode: true },
+  // { prefix: "https://api.allorigins.win/raw?url=", encode: true },
 ];
 
 let activeProxyIndex = 0;

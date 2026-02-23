@@ -19,11 +19,11 @@ function encodeModulePath(modulePath: string): string {
 export const golangAdapter: RegistryAdapter = {
   id: "golang",
   label: "Go Modules",
-  placeholder: "Enter module path, e.g. github.com/gin-gonic/gin",
+  placeholder: "Enter module path, e.g. github.com/gorilla/mux",
   examples: [
-    "github.com/gin-gonic/gin",
-    "golang.org/x/net",
     "github.com/gorilla/mux",
+    "github.com/json-iterator/go",
+    "github.com/stretchr/testify",
   ],
   parserType: "zip",
   metaFileName: "go.mod",
