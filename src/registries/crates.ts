@@ -50,6 +50,18 @@ export const cratesAdapter: RegistryAdapter = {
     };
   },
 
+  async fetchVersionInfo(name: string, version: string): Promise<RegistryPackageInfo> {
+    const tarballUrl = `${CRATES_DOWNLOAD}/${encodeURIComponent(name)}/${encodeURIComponent(name)}-${version}.crate`;
+
+    return {
+      name,
+      version,
+      description: "",
+      tarballUrl,
+      versions: [],
+    };
+  },
+
   async fetchArchive(
     _name: string,
     _version: string,

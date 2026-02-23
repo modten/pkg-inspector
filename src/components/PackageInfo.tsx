@@ -3,6 +3,9 @@ import type { PackageInfo } from "../types";
 
 interface PackageInfoProps {
   info: PackageInfo;
+  versions: string[];
+  onVersionChange: (version: string) => void;
+  versionLoading: boolean;
 }
 
 function Badge({ children }: { children: React.ReactNode }) {
@@ -13,7 +16,7 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function PackageInfoPanel({ info }: PackageInfoProps) {
+export function PackageInfoPanel({ info, versions, onVersionChange, versionLoading }: PackageInfoProps) {
   const [expanded, setExpanded] = useState(false);
 
   const depCount = Object.keys(info.dependencies).length;
@@ -35,7 +38,44 @@ export function PackageInfoPanel({ info }: PackageInfoProps) {
       <div className="flex items-center gap-3 px-4 py-2.5">
         {/* Left: package identity */}
         <span className="font-semibold text-gray-100 text-sm">{info.name}</span>
-        <span className="text-xs text-blue-400 font-mono">v{info.version}</span>
+        {versions.length > 1 ? (
+          <span className="relative inline-flex items-center">
+            <select
+              value={info.version}
+              onChange={(e) => onVersionChange(e.target.value)}
+              disabled={versionLoading}
+              className="appearance-none bg-gray-700/60 hover:bg-gray-700 text-blue-400 text-xs font-mono
+                         pl-2 pr-5 py-0.5 rounded border border-gray-600 cursor-pointer
+                         focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent
+                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {versions.map((v) => (
+                <option key={v} value={v}>
+                  v{v}
+                </option>
+              ))}
+            </select>
+            <svg
+              className="pointer-events-none absolute right-1 w-3 h-3 text-gray-400"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                clipRule="evenodd"
+              />
+            </svg>
+            {versionLoading && (
+              <svg className="animate-spin ml-1.5 w-3 h-3 text-blue-400" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+          </span>
+        ) : (
+          <span className="text-xs text-blue-400 font-mono">v{info.version}</span>
+        )}
         {info.license && (
           <span className="text-xs bg-green-900/40 text-green-400 px-1.5 py-0.5 rounded">
             {info.license}

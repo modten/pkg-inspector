@@ -67,8 +67,11 @@ export interface RegistryAdapter {
   /** Whether archive download needs CORS proxy */
   archiveNeedsCors: boolean;
 
-  /** Fetch package metadata from registry */
+  /** Fetch package metadata from registry (latest version) */
   fetchPackageInfo(name: string): Promise<RegistryPackageInfo>;
+
+  /** Fetch package metadata for a specific version */
+  fetchVersionInfo(name: string, version: string): Promise<RegistryPackageInfo>;
 
   /** Download the archive as raw bytes */
   fetchArchive(

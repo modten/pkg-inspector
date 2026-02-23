@@ -96,6 +96,20 @@ export const mavenAdapter: RegistryAdapter = {
     };
   },
 
+  async fetchVersionInfo(input: string, version: string): Promise<RegistryPackageInfo> {
+    const { groupId, artifactId } = parseGAV(input);
+    const groupPath = groupId.replace(/\./g, "/");
+    const tarballUrl = `${MAVEN_REPO}/${groupPath}/${artifactId}/${version}/${artifactId}-${version}.jar`;
+
+    return {
+      name: `${groupId}:${artifactId}`,
+      version,
+      description: "",
+      tarballUrl,
+      versions: [],
+    };
+  },
+
   async fetchArchive(
     _name: string,
     _version: string,

@@ -47,6 +47,29 @@ export const npmAdapter: RegistryAdapter = {
     };
   },
 
+  async fetchVersionInfo(name: string, version: string): Promise<RegistryPackageInfo> {
+    const url = `${NPM_REGISTRY}/${encodeURIComponent(name).replace("%40", "@").replace("%2F", "/")}/${version}`;
+    const res = await corsFetch(url, this.metadataNeedsCors);
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Version "${version}" not found for "${name}" on npm`);
+      }
+      throw new Error(`npm registry error: ${res.status} ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    const tarballUrl: string = data.dist?.tarball ?? "";
+
+    return {
+      name: data.name ?? name,
+      version: data.version ?? version,
+      description: data.description ?? "",
+      tarballUrl,
+      versions: [], // not needed for version switch
+    };
+  },
+
   async fetchArchive(
     _name: string,
     _version: string,

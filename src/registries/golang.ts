@@ -83,6 +83,19 @@ export const golangAdapter: RegistryAdapter = {
     };
   },
 
+  async fetchVersionInfo(modulePath: string, version: string): Promise<RegistryPackageInfo> {
+    const encoded = encodeModulePath(modulePath);
+    const tarballUrl = `${GO_PROXY}/${encoded}/@v/${version}.zip`;
+
+    return {
+      name: modulePath,
+      version,
+      description: "",
+      tarballUrl,
+      versions: [],
+    };
+  },
+
   async fetchArchive(
     _name: string,
     _version: string,

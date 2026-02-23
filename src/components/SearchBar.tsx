@@ -1,23 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { RegistryAdapter } from "../types";
 import { registries } from "../registries";
 
 interface SearchBarProps {
   onSearch: (registry: RegistryAdapter, name: string) => void;
+  onRegistryChange: (registry: RegistryAdapter) => void;
   disabled: boolean;
+  /** Controlled registry id — syncs dropdown when URL changes */
+  registryId?: string;
+  /** Controlled package name — syncs input when URL changes */
+  packageName?: string;
 }
 
-export function SearchBar({ onSearch, disabled }: SearchBarProps) {
+export function SearchBar({
+  onSearch,
+  onRegistryChange,
+  disabled,
+  registryId: controlledRegistryId,
+  packageName: controlledPackageName,
+}: SearchBarProps) {
   const [selectedRegistryId, setSelectedRegistryId] = useState(
-    registries[0].id
+    controlledRegistryId ?? registries[0].id
   );
-  const [packageName, setPackageName] = useState("");
+  const [inputName, setInputName] = useState(controlledPackageName ?? "");
+
+  // Sync registry dropdown when controlled prop changes (URL navigation)
+  useEffect(() => {
+    if (controlledRegistryId && controlledRegistryId !== selectedRegistryId) {
+      setSelectedRegistryId(controlledRegistryId);
+    }
+  }, [controlledRegistryId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync package name input when controlled prop changes (URL navigation)
+  useEffect(() => {
+    if (controlledPackageName !== undefined && controlledPackageName !== inputName) {
+      setInputName(controlledPackageName);
+    }
+  }, [controlledPackageName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const registry = registries.find((r) => r.id === selectedRegistryId)!;
 
+  function handleRegistrySelect(id: string) {
+    setSelectedRegistryId(id);
+    setInputName("");
+    const newRegistry = registries.find((r) => r.id === id)!;
+    onRegistryChange(newRegistry);
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const name = packageName.trim();
+    const name = inputName.trim();
     if (!name) return;
     onSearch(registry, name);
   }
@@ -27,7 +59,7 @@ export function SearchBar({ onSearch, disabled }: SearchBarProps) {
       {/* Ecosystem selector */}
       <select
         value={selectedRegistryId}
-        onChange={(e) => setSelectedRegistryId(e.target.value)}
+        onChange={(e) => handleRegistrySelect(e.target.value)}
         disabled={disabled}
         className="bg-gray-800 text-gray-200 border border-gray-700 rounded-lg px-3 py-2.5 text-sm
                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
@@ -44,8 +76,8 @@ export function SearchBar({ onSearch, disabled }: SearchBarProps) {
       <div className="relative flex-1">
         <input
           type="text"
-          value={packageName}
-          onChange={(e) => setPackageName(e.target.value)}
+          value={inputName}
+          onChange={(e) => setInputName(e.target.value)}
           placeholder={registry.placeholder}
           disabled={disabled}
           className="w-full bg-gray-800 text-gray-100 border border-gray-700 rounded-lg px-4 py-2.5 text-sm
@@ -58,7 +90,7 @@ export function SearchBar({ onSearch, disabled }: SearchBarProps) {
       {/* Submit button */}
       <button
         type="submit"
-        disabled={disabled || !packageName.trim()}
+        disabled={disabled || !inputName.trim()}
         className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg px-5 py-2.5 text-sm
                    transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
                    focus:ring-offset-gray-950 disabled:opacity-50 disabled:cursor-not-allowed

@@ -53,6 +53,34 @@ export const pypiAdapter: RegistryAdapter = {
     };
   },
 
+  async fetchVersionInfo(name: string, version: string): Promise<RegistryPackageInfo> {
+    const url = `${PYPI_API}/${encodeURIComponent(name)}/${version}/json`;
+    const res = await corsFetch(url, this.metadataNeedsCors);
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Version "${version}" not found for "${name}" on PyPI`);
+      }
+      throw new Error(`PyPI API error: ${res.status} ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    const info = data.info ?? {};
+
+    // Find sdist URL for this specific version
+    const urls: { packagetype: string; url: string }[] = data.urls ?? [];
+    const sdist = urls.find((u) => u.packagetype === "sdist");
+    const tarballUrl = sdist?.url ?? urls[0]?.url ?? "";
+
+    return {
+      name: info.name ?? name,
+      version: info.version ?? version,
+      description: info.summary ?? "",
+      tarballUrl,
+      versions: [],
+    };
+  },
+
   async fetchArchive(
     _name: string,
     _version: string,

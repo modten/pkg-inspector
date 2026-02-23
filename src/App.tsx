@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type {
   ParsedFile,
   PackageInfo,
@@ -7,6 +7,7 @@ import type {
   LoadingStep,
 } from "./types";
 import { useWasm } from "./hooks/useWasm";
+import { useUrlState, parseUrl, pushUrl, replaceUrl, pushIdle } from "./hooks/useUrlState";
 import { TarStore } from "./lib/tar-store";
 import { corsProxy } from "./lib/cors";
 import { SearchBar } from "./components/SearchBar";
@@ -14,7 +15,7 @@ import { FileTree } from "./components/FileTree";
 import { FilePreview } from "./components/FilePreview";
 import { PackageInfoPanel } from "./components/PackageInfo";
 import { Loading } from "./components/Loading";
-import { registries } from "./registries";
+import { registries, getRegistry } from "./registries";
 
 /** Tarball size threshold for lazy loading (5 MB). */
 const LAZY_THRESHOLD = 5 * 1024 * 1024;
@@ -29,6 +30,8 @@ export default function App() {
     parseZip,
   } = useWasm();
 
+  const urlState = useUrlState();
+
   const [status, setStatus] = useState<AppStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<LoadingStep[]>([]);
@@ -37,6 +40,16 @@ export default function App() {
   const [packageInfo, setPackageInfo] = useState<PackageInfo | null>(null);
   const [inspectedName, setInspectedName] = useState("");
   const [fileLoading, setFileLoading] = useState(false);
+  const [availableVersions, setAvailableVersions] = useState<string[]>([]);
+  const [currentRegistry, setCurrentRegistry] = useState<RegistryAdapter | null>(null);
+  const [versionLoading, setVersionLoading] = useState(false);
+  const [selectedRegistry, setSelectedRegistry] = useState<RegistryAdapter>(
+    () => {
+      // Initialize from URL if a valid registry is in the path
+      const initial = urlState.registryId ? getRegistry(urlState.registryId) : null;
+      return initial ?? registries[0];
+    }
+  );
 
   // TarStore ref for lazy mode — persists across renders, cleaned up on new search.
   const tarStoreRef = useRef<TarStore | null>(null);
@@ -74,8 +87,45 @@ export default function App() {
     }
   }, []);
 
+  /**
+   * Reset all state back to idle (used by registry change and popstate).
+   */
+  const resetToIdle = useCallback(
+    (registry?: RegistryAdapter) => {
+      // Clean up previous lazy store.
+      if (tarStoreRef.current) {
+        tarStoreRef.current.dispose();
+        tarStoreRef.current = null;
+      }
+
+      if (registry) setSelectedRegistry(registry);
+      setStatus("idle");
+      setError(null);
+      setFiles([]);
+      setSelectedFile(null);
+      setPackageInfo(null);
+      setInspectedName("");
+      setFileLoading(false);
+      setAvailableVersions([]);
+      setCurrentRegistry(null);
+      setVersionLoading(false);
+    },
+    []
+  );
+
+  /**
+   * Handle registry change — reset to idle state with the new registry's examples.
+   */
+  const handleRegistryChange = useCallback(
+    (registry: RegistryAdapter) => {
+      resetToIdle(registry);
+      pushIdle();
+    },
+    [resetToIdle]
+  );
+
   const handleSearch = useCallback(
-    async (registry: RegistryAdapter, name: string) => {
+    async (registry: RegistryAdapter, name: string, version?: string) => {
       // Verify required parsers are available.
       if (registry.parserType === "tgz" && (!fetchAndParseTgz || !indexTgz)) return;
       if (registry.parserType === "zip" && !parseZip) return;
@@ -93,6 +143,9 @@ export default function App() {
       setPackageInfo(null);
       setInspectedName(name);
       setFileLoading(false);
+      setCurrentRegistry(registry);
+      setSelectedRegistry(registry);
+      setAvailableVersions([]);
 
       const loadingSteps: LoadingStep[] = [
         { label: "Fetching package info...", done: false },
@@ -101,16 +154,28 @@ export default function App() {
       setSteps(loadingSteps);
 
       try {
-        // Step 1: Fetch package info from registry
+        // Step 1: Fetch package info from registry (always needed for version list)
         const pkgInfo = await registry.fetchPackageInfo(name);
         updateStep(0, true);
+
+        // Store sorted version list (newest first)
+        const sortedVersions = [...pkgInfo.versions].sort((a, b) =>
+          b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" })
+        );
+        setAvailableVersions(sortedVersions);
+
+        // If a specific version was requested, fetch that version's info instead
+        const targetVersion = version ?? pkgInfo.version;
+        const versionInfo = version
+          ? await registry.fetchVersionInfo(name, version)
+          : pkgInfo;
 
         if (registry.parserType === "zip") {
           // --- Zip path: always eager (download bytes in JS, parse in WASM) ---
           const archiveBytes = await registry.fetchArchive(
-            pkgInfo.name,
-            pkgInfo.version,
-            pkgInfo.tarballUrl,
+            versionInfo.name,
+            versionInfo.version,
+            versionInfo.tarballUrl,
           );
           const result = await parseZip!(archiveBytes);
           updateStep(1, true);
@@ -122,7 +187,7 @@ export default function App() {
           setStatus("success");
         } else {
           // --- Tgz path: eager or lazy based on size ---
-          const url = resolveUrl(pkgInfo.tarballUrl, registry);
+          const url = resolveUrl(versionInfo.tarballUrl, registry);
 
           // Determine eager vs lazy path based on tarball size.
           const tarballSize = await getTarballSize(url);
@@ -169,6 +234,9 @@ export default function App() {
             setStatus("success");
           }
         }
+
+        // Update URL: replaceState to include the resolved version
+        replaceUrl(registry.id, name, targetVersion);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "An unexpected error occurred"
@@ -221,7 +289,160 @@ export default function App() {
     []
   );
 
+  /**
+   * Handle version change — re-fetch and re-parse the archive for the selected version.
+   */
+  const handleVersionChange = useCallback(
+    async (version: string) => {
+      if (!currentRegistry) return;
+
+      // Verify required parsers are available.
+      if (currentRegistry.parserType === "tgz" && (!fetchAndParseTgz || !indexTgz)) return;
+      if (currentRegistry.parserType === "zip" && !parseZip) return;
+
+      // Skip if same version is already loaded.
+      if (packageInfo?.version === version) return;
+
+      // Clean up previous lazy store.
+      if (tarStoreRef.current) {
+        tarStoreRef.current.dispose();
+        tarStoreRef.current = null;
+      }
+
+      setVersionLoading(true);
+      setFiles([]);
+      setSelectedFile(null);
+      setFileLoading(false);
+
+      try {
+        // Fetch version-specific info (tarball URL)
+        const versionInfo = await currentRegistry.fetchVersionInfo(inspectedName, version);
+
+        if (currentRegistry.parserType === "zip") {
+          // --- Zip path: always eager ---
+          const archiveBytes = await currentRegistry.fetchArchive(
+            versionInfo.name,
+            versionInfo.version,
+            versionInfo.tarballUrl,
+          );
+          const result = await parseZip!(archiveBytes);
+          const metadata = currentRegistry.extractMetadata(result.files);
+
+          setFiles(result.files);
+          setPackageInfo(metadata);
+        } else {
+          // --- Tgz path: eager or lazy based on size ---
+          const url = resolveUrl(versionInfo.tarballUrl, currentRegistry);
+          const tarballSize = await getTarballSize(url);
+          const useLazy = tarballSize > LAZY_THRESHOLD;
+
+          if (useLazy) {
+            const { index, store } = await indexTgz!(url);
+            tarStoreRef.current = store;
+
+            const lazyFiles = store.toFiles(index.files);
+
+            // Eagerly load metadata file.
+            const metaFile = lazyFiles.find(
+              (f) =>
+                !f.isDir &&
+                (f.path === "package/" + currentRegistry.metaFileName ||
+                  f.path.endsWith("/" + currentRegistry.metaFileName)) &&
+                f.path.split("/").length <= 2
+            );
+
+            if (metaFile && metaFile.lazy) {
+              const { content, isBinary } = await store.readFile(metaFile.path);
+              metaFile.content = content;
+              metaFile.isBinary = isBinary;
+              metaFile.lazy = false;
+            }
+
+            const metadata = currentRegistry.extractMetadata(lazyFiles);
+
+            setFiles(lazyFiles);
+            setPackageInfo(metadata);
+          } else {
+            const result = await fetchAndParseTgz!(url);
+            const metadata = currentRegistry.extractMetadata(result.files);
+
+            setFiles(result.files);
+            setPackageInfo(metadata);
+          }
+        }
+
+        // Update URL with the new version (replaceState — no new history entry)
+        if (currentRegistry) {
+          replaceUrl(currentRegistry.id, inspectedName, version);
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "An unexpected error occurred"
+        );
+        setStatus("error");
+      } finally {
+        setVersionLoading(false);
+      }
+    },
+    [currentRegistry, inspectedName, packageInfo?.version, fetchAndParseTgz, indexTgz, parseZip, resolveUrl, getTarballSize]
+  );
+
+  // --- URL-driven initial load ---
+  // When the app mounts with a URL like /npm/lodash@4.17.21, auto-trigger search.
+  const initialLoadDone = useRef(false);
+  useEffect(() => {
+    if (!wasmReady || initialLoadDone.current) return;
+    initialLoadDone.current = true;
+
+    const { registryId, packageName, version } = parseUrl(window.location.pathname);
+    if (!registryId || !packageName) return;
+
+    const registry = getRegistry(registryId);
+    if (!registry) return;
+
+    handleSearch(registry, packageName, version ?? undefined);
+  }, [wasmReady, handleSearch]);
+
+  // --- Handle popstate (browser back/forward) ---
+  // The urlState from useUrlState() updates reactively on popstate.
+  // We compare it against current app state to decide what to do.
+  const prevUrlRef = useRef(urlState);
+  useEffect(() => {
+    const prev = prevUrlRef.current;
+    prevUrlRef.current = urlState;
+
+    // Skip the initial render (handled by the mount effect above)
+    if (prev === urlState) return;
+
+    // If URL is now idle (e.g., user went back to /)
+    if (!urlState.registryId || !urlState.packageName) {
+      resetToIdle();
+      return;
+    }
+
+    const registry = getRegistry(urlState.registryId);
+    if (!registry) {
+      resetToIdle();
+      return;
+    }
+
+    // If registry or package changed, do a full search
+    handleSearch(registry, urlState.packageName, urlState.version ?? undefined);
+  }, [urlState, handleSearch, resetToIdle]);
+
   const isLoading = status === "loading";
+
+  /**
+   * Wrapper for user-initiated searches (from SearchBar submit).
+   * Pushes a new URL history entry, then triggers the actual search.
+   */
+  const handleUserSearch = useCallback(
+    (registry: RegistryAdapter, name: string) => {
+      pushUrl(registry.id, name);
+      handleSearch(registry, name);
+    },
+    [handleSearch]
+  );
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -237,8 +458,11 @@ export default function App() {
             </span>
           </div>
           <SearchBar
-            onSearch={handleSearch}
+            onSearch={handleUserSearch}
+            onRegistryChange={handleRegistryChange}
             disabled={isLoading || !wasmReady}
+            registryId={selectedRegistry.id}
+            packageName={inspectedName}
           />
         </div>
       </header>
@@ -271,10 +495,13 @@ export default function App() {
                 Enter a package name above to inspect its contents
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
-                {["lodash", "react", "express", "chalk"].map((example) => (
+                {selectedRegistry.examples.map((example) => (
                   <button
                     key={example}
-                    onClick={() => handleSearch(registries[0], example)}
+                    onClick={() => {
+                      pushUrl(selectedRegistry.id, example);
+                      handleSearch(selectedRegistry, example);
+                    }}
                     className="text-xs text-blue-400 hover:text-blue-300 bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-md transition-colors"
                   >
                     {example}
@@ -307,7 +534,12 @@ export default function App() {
               {/* Package info bar — collapsible */}
               {packageInfo && (
                 <div className="px-4 py-2 flex-shrink-0">
-                  <PackageInfoPanel info={packageInfo} />
+                  <PackageInfoPanel
+                    info={packageInfo}
+                    versions={availableVersions}
+                    onVersionChange={handleVersionChange}
+                    versionLoading={versionLoading}
+                  />
                 </div>
               )}
 
