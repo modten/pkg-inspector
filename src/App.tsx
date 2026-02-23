@@ -454,7 +454,7 @@ export default function App() {
               pkg-inspector
             </h1>
             <span className="text-xs text-gray-600 hidden sm:inline">
-              Inspect packages in your browser &mdash; powered by Go WASM
+              Inspect packages in your browser
             </span>
           </div>
           <SearchBar

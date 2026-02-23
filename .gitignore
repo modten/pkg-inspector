@@ -4,11 +4,6 @@ node_modules/
 # Build output
 dist/
 
-# WASM compiled artifacts (rebuild with `make build-wasm`)
-public/tgz-parser.wasm
-public/zip-parser.wasm
-public/wasm_exec.js
-
 # Editor / IDE
 .vscode/
 .idea/
