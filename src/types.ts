@@ -8,6 +8,10 @@ export interface ParsedFile {
   isBinary: boolean;
   /** When true, content is not yet loaded (lazy mode). */
   lazy?: boolean;
+  /** When true, this is a Java .class file that can be parsed for metadata/bytecode. */
+  isClassFile?: boolean;
+  /** Base64-encoded raw bytes of the file (used for .class files sent to class-parser WASM). */
+  rawBase64?: string;
 }
 
 export interface ParseResult {

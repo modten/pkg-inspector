@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { ParsedFile } from "../types";
 import { useHighlighter } from "../hooks/useHighlighter";
+import { ClassFileViewer } from "./ClassFileViewer";
 
 interface FilePreviewProps {
   file: ParsedFile | null;
@@ -73,6 +74,8 @@ export function FilePreview({ file, loading }: FilePreviewProps) {
             </svg>
             Loading file content...
           </div>
+        ) : file.isBinary && file.isClassFile && file.rawBase64 ? (
+          <ClassFileViewer file={file} />
         ) : file.isBinary ? (
           <div className="flex items-center justify-center h-full text-gray-500 text-sm">
             Binary file &mdash; preview not available

@@ -3,8 +3,10 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
+	"strings"
 	"syscall/js"
 	"unicode/utf8"
 )
@@ -17,11 +19,13 @@ const (
 
 // ParsedFile represents a single file entry extracted from the archive.
 type ParsedFile struct {
-	Path     string `json:"path"`
-	Size     int64  `json:"size"`
-	IsDir    bool   `json:"isDir"`
-	Content  string `json:"content"`
-	IsBinary bool   `json:"isBinary"`
+	Path        string `json:"path"`
+	Size        int64  `json:"size"`
+	IsDir       bool   `json:"isDir"`
+	Content     string `json:"content"`
+	IsBinary    bool   `json:"isBinary"`
+	IsClassFile bool   `json:"isClassFile,omitempty"`
+	RawBase64   string `json:"rawBase64,omitempty"`
 }
 
 // ParseResult is the top-level structure returned to JavaScript.
@@ -77,7 +81,12 @@ func parseZipBytes(data []byte) (*ParseResult, error) {
 					return nil, err
 				}
 
-				if isBinaryContent(buf) {
+				// Special handling for .class files: pass raw bytes as base64
+				if strings.HasSuffix(strings.ToLower(f.Name), ".class") {
+					entry.IsBinary = true
+					entry.IsClassFile = true
+					entry.RawBase64 = base64.StdEncoding.EncodeToString(buf)
+				} else if isBinaryContent(buf) {
 					entry.IsBinary = true
 				} else {
 					entry.Content = string(buf)

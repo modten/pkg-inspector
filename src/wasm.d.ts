@@ -20,4 +20,8 @@ interface Window {
   // --- zip-parser exports ---
   /** Parse a zip archive from in-memory bytes */
   __wasm_parseZip: (data: Uint8Array) => Promise<string>;
+
+  // --- class-parser exports ---
+  /** Parse a Java .class file from raw bytes, returns JSON ClassInfo */
+  __wasm_parseClass: (data: Uint8Array) => Promise<string>;
 }
