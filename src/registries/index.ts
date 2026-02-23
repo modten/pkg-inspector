@@ -1,5 +1,9 @@
 import type { RegistryAdapter } from "../types";
 import { npmAdapter } from "./npm";
+import { cratesAdapter } from "./crates";
+import { pypiAdapter } from "./pypi";
+import { golangAdapter } from "./golang";
+import { mavenAdapter } from "./maven";
 
 /**
  * All registered ecosystem adapters.
@@ -7,7 +11,10 @@ import { npmAdapter } from "./npm";
  */
 export const registries: RegistryAdapter[] = [
   npmAdapter,
-  // Future: golangAdapter, pypiAdapter, cratesAdapter, mavenAdapter
+  cratesAdapter,
+  pypiAdapter,
+  golangAdapter,
+  mavenAdapter,
 ];
 
 /**

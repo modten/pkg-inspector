@@ -12,6 +12,8 @@ interface WasmState {
   fetchAndParseTgz: ((url: string) => Promise<ParseResult>) | null;
   /** Phase 2: index-only pass for lazy loading; returns index + TarStore */
   indexTgz: ((url: string) => Promise<{ index: IndexResult; store: TarStore }>) | null;
+  /** Parse a zip archive from in-memory bytes */
+  parseZip: ((data: Uint8Array) => Promise<ParseResult>) | null;
 }
 
 export function useWasm(): WasmState {
@@ -26,18 +28,32 @@ export function useWasm(): WasmState {
 
     async function init() {
       try {
+        // Load both WASM modules in parallel — each needs its own Go() instance.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const go = new (globalThis as any).Go();
-        const result = await WebAssembly.instantiateStreaming(
-          fetch("/tgz-parser.wasm"),
-          go.importObject
-        );
-        // Run the Go program (non-blocking — it stays alive via select{})
-        go.run(result.instance);
+        const GoClass = (globalThis as any).Go;
+
+        const goTgz = new GoClass();
+        const goZip = new GoClass();
+
+        const [tgzResult, zipResult] = await Promise.all([
+          WebAssembly.instantiateStreaming(
+            fetch("/tgz-parser.wasm"),
+            goTgz.importObject,
+          ),
+          WebAssembly.instantiateStreaming(
+            fetch("/zip-parser.wasm"),
+            goZip.importObject,
+          ),
+        ]);
+
+        // Run both Go programs (non-blocking — they stay alive via select{})
+        goTgz.run(tgzResult.instance);
+        goZip.run(zipResult.instance);
+
         setReady(true);
       } catch (err) {
         setError(
-          `Failed to load WASM: ${err instanceof Error ? err.message : String(err)}`
+          `Failed to load WASM: ${err instanceof Error ? err.message : String(err)}`,
         );
       } finally {
         setLoading(false);
@@ -82,5 +98,14 @@ export function useWasm(): WasmState {
       }
     : null;
 
-  return { ready, loading, error, parseTgz, fetchAndParseTgz, indexTgz };
+  // Zip parser: parse from in-memory Uint8Array
+  const parseZip = ready
+    ? async (data: Uint8Array): Promise<ParseResult> => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const jsonStr: string = await (window as any).__wasm_parseZip(data);
+        return JSON.parse(jsonStr) as ParseResult;
+      }
+    : null;
+
+  return { ready, loading, error, parseTgz, fetchAndParseTgz, indexTgz, parseZip };
 }

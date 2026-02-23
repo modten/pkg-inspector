@@ -26,6 +26,7 @@ export default function App() {
     error: wasmError,
     fetchAndParseTgz,
     indexTgz,
+    parseZip,
   } = useWasm();
 
   const [status, setStatus] = useState<AppStatus>("idle");
@@ -75,7 +76,9 @@ export default function App() {
 
   const handleSearch = useCallback(
     async (registry: RegistryAdapter, name: string) => {
-      if (!fetchAndParseTgz || !indexTgz) return;
+      // Verify required parsers are available.
+      if (registry.parserType === "tgz" && (!fetchAndParseTgz || !indexTgz)) return;
+      if (registry.parserType === "zip" && !parseZip) return;
 
       // Clean up previous lazy store.
       if (tarStoreRef.current) {
@@ -102,44 +105,14 @@ export default function App() {
         const pkgInfo = await registry.fetchPackageInfo(name);
         updateStep(0, true);
 
-        const url = resolveUrl(pkgInfo.tarballUrl, registry);
-
-        // Determine eager vs lazy path based on tarball size.
-        const tarballSize = await getTarballSize(url);
-        const useLazy = tarballSize > LAZY_THRESHOLD;
-
-        if (useLazy) {
-          // --- Lazy path (Phase 2): index only, load files on demand ---
-          const { index, store } = await indexTgz(url);
-          tarStoreRef.current = store;
-          updateStep(1, true);
-
-          const lazyFiles = store.toFiles(index.files);
-
-          // Extract metadata — need to eagerly load the metadata file.
-          const metaFile = lazyFiles.find(
-            (f) =>
-              !f.isDir &&
-              (f.path === "package/" + registry.metaFileName ||
-                f.path.endsWith("/" + registry.metaFileName)) &&
-              f.path.split("/").length <= 2
+        if (registry.parserType === "zip") {
+          // --- Zip path: always eager (download bytes in JS, parse in WASM) ---
+          const archiveBytes = await registry.fetchArchive(
+            pkgInfo.name,
+            pkgInfo.version,
+            pkgInfo.tarballUrl,
           );
-
-          if (metaFile && metaFile.lazy) {
-            const { content, isBinary } = await store.readFile(metaFile.path);
-            metaFile.content = content;
-            metaFile.isBinary = isBinary;
-            metaFile.lazy = false;
-          }
-
-          const metadata = registry.extractMetadata(lazyFiles);
-
-          setFiles(lazyFiles);
-          setPackageInfo(metadata);
-          setStatus("success");
-        } else {
-          // --- Eager path (Phase 1): fetch + parse everything in WASM ---
-          const result = await fetchAndParseTgz(url);
+          const result = await parseZip!(archiveBytes);
           updateStep(1, true);
 
           const metadata = registry.extractMetadata(result.files);
@@ -147,6 +120,54 @@ export default function App() {
           setFiles(result.files);
           setPackageInfo(metadata);
           setStatus("success");
+        } else {
+          // --- Tgz path: eager or lazy based on size ---
+          const url = resolveUrl(pkgInfo.tarballUrl, registry);
+
+          // Determine eager vs lazy path based on tarball size.
+          const tarballSize = await getTarballSize(url);
+          const useLazy = tarballSize > LAZY_THRESHOLD;
+
+          if (useLazy) {
+            // --- Lazy path (Phase 2): index only, load files on demand ---
+            const { index, store } = await indexTgz!(url);
+            tarStoreRef.current = store;
+            updateStep(1, true);
+
+            const lazyFiles = store.toFiles(index.files);
+
+            // Extract metadata — need to eagerly load the metadata file.
+            const metaFile = lazyFiles.find(
+              (f) =>
+                !f.isDir &&
+                (f.path === "package/" + registry.metaFileName ||
+                  f.path.endsWith("/" + registry.metaFileName)) &&
+                f.path.split("/").length <= 2
+            );
+
+            if (metaFile && metaFile.lazy) {
+              const { content, isBinary } = await store.readFile(metaFile.path);
+              metaFile.content = content;
+              metaFile.isBinary = isBinary;
+              metaFile.lazy = false;
+            }
+
+            const metadata = registry.extractMetadata(lazyFiles);
+
+            setFiles(lazyFiles);
+            setPackageInfo(metadata);
+            setStatus("success");
+          } else {
+            // --- Eager path (Phase 1): fetch + parse everything in WASM ---
+            const result = await fetchAndParseTgz!(url);
+            updateStep(1, true);
+
+            const metadata = registry.extractMetadata(result.files);
+
+            setFiles(result.files);
+            setPackageInfo(metadata);
+            setStatus("success");
+          }
         }
       } catch (err) {
         setError(
@@ -155,7 +176,7 @@ export default function App() {
         setStatus("error");
       }
     },
-    [fetchAndParseTgz, indexTgz, updateStep, resolveUrl, getTarballSize]
+    [fetchAndParseTgz, indexTgz, parseZip, updateStep, resolveUrl, getTarballSize]
   );
 
   /**
