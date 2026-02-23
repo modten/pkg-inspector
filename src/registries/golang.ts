@@ -5,8 +5,7 @@ import type {
   PackageInfo,
 } from "../types";
 import { corsFetch } from "../lib/cors";
-
-const GO_PROXY = "https://proxy.golang.org";
+import { getRegistryUrl, getCorsFlags } from "../lib/settings";
 
 /**
  * Encode a Go module path for use in proxy.golang.org URLs.
@@ -28,14 +27,16 @@ export const golangAdapter: RegistryAdapter = {
   ],
   parserType: "zip",
   metaFileName: "go.mod",
-  metadataNeedsCors: false,
-  archiveNeedsCors: false,
+
+  get metadataNeedsCors() { return getCorsFlags("golang").metadataNeedsCors; },
+  get archiveNeedsCors() { return getCorsFlags("golang").archiveNeedsCors; },
 
   async fetchPackageInfo(modulePath: string): Promise<RegistryPackageInfo> {
+    const proxy = getRegistryUrl("golang");
     const encoded = encodeModulePath(modulePath);
 
     // Fetch latest version info
-    const latestUrl = `${GO_PROXY}/${encoded}/@latest`;
+    const latestUrl = `${proxy}/${encoded}/@latest`;
     const latestRes = await corsFetch(latestUrl, this.metadataNeedsCors);
 
     if (!latestRes.ok) {
@@ -53,7 +54,7 @@ export const golangAdapter: RegistryAdapter = {
     // Fetch version list
     let versions: string[] = [];
     try {
-      const listUrl = `${GO_PROXY}/${encoded}/@v/list`;
+      const listUrl = `${proxy}/${encoded}/@v/list`;
       const listRes = await corsFetch(listUrl, this.metadataNeedsCors);
       if (listRes.ok) {
         const listText = await listRes.text();
@@ -72,7 +73,7 @@ export const golangAdapter: RegistryAdapter = {
       versions = [latestVersion];
     }
 
-    const tarballUrl = `${GO_PROXY}/${encoded}/@v/${latestVersion}.zip`;
+    const tarballUrl = `${proxy}/${encoded}/@v/${latestVersion}.zip`;
 
     return {
       name: modulePath,
@@ -84,8 +85,9 @@ export const golangAdapter: RegistryAdapter = {
   },
 
   async fetchVersionInfo(modulePath: string, version: string): Promise<RegistryPackageInfo> {
+    const proxy = getRegistryUrl("golang");
     const encoded = encodeModulePath(modulePath);
-    const tarballUrl = `${GO_PROXY}/${encoded}/@v/${version}.zip`;
+    const tarballUrl = `${proxy}/${encoded}/@v/${version}.zip`;
 
     return {
       name: modulePath,

@@ -6,9 +6,7 @@ import type {
   PackageInfo,
 } from "../types";
 import { corsFetch } from "../lib/cors";
-
-const CRATES_API = "https://crates.io/api/v1/crates";
-const CRATES_DOWNLOAD = "https://static.crates.io/crates";
+import { getRegistryUrl, getSecondaryUrl, getCorsFlags } from "../lib/settings";
 
 export const cratesAdapter: RegistryAdapter = {
   id: "crates",
@@ -17,11 +15,13 @@ export const cratesAdapter: RegistryAdapter = {
   examples: ["serde", "tokio", "rand", "clap"],
   parserType: "tgz",
   metaFileName: "Cargo.toml",
-  metadataNeedsCors: false,
-  archiveNeedsCors: false,
+
+  get metadataNeedsCors() { return getCorsFlags("crates").metadataNeedsCors; },
+  get archiveNeedsCors() { return getCorsFlags("crates").archiveNeedsCors; },
 
   async fetchPackageInfo(name: string): Promise<RegistryPackageInfo> {
-    const url = `${CRATES_API}/${encodeURIComponent(name)}`;
+    const api = getRegistryUrl("crates");
+    const url = `${api}/${encodeURIComponent(name)}`;
     const res = await corsFetch(url, this.metadataNeedsCors);
 
     if (!res.ok) {
@@ -39,7 +39,8 @@ export const cratesAdapter: RegistryAdapter = {
       .map((v: { num: string }) => v.num)
       .filter(Boolean);
 
-    const tarballUrl = `${CRATES_DOWNLOAD}/${encodeURIComponent(name)}/${encodeURIComponent(name)}-${latestVersion}.crate`;
+    const download = getSecondaryUrl("crates");
+    const tarballUrl = `${download}/${encodeURIComponent(name)}/${encodeURIComponent(name)}-${latestVersion}.crate`;
 
     return {
       name: crate?.name ?? name,
@@ -51,7 +52,8 @@ export const cratesAdapter: RegistryAdapter = {
   },
 
   async fetchVersionInfo(name: string, version: string): Promise<RegistryPackageInfo> {
-    const tarballUrl = `${CRATES_DOWNLOAD}/${encodeURIComponent(name)}/${encodeURIComponent(name)}-${version}.crate`;
+    const download = getSecondaryUrl("crates");
+    const tarballUrl = `${download}/${encodeURIComponent(name)}/${encodeURIComponent(name)}-${version}.crate`;
 
     return {
       name,

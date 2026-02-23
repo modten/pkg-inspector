@@ -5,9 +5,7 @@ import type {
   PackageInfo,
 } from "../types";
 import { corsFetch } from "../lib/cors";
-
-const MAVEN_SEARCH = "https://search.maven.org/solrsearch/select";
-const MAVEN_REPO = "https://repo1.maven.org/maven2";
+import { getRegistryUrl, getSecondaryUrl, getCorsFlags } from "../lib/settings";
 
 /**
  * Parse a "groupId:artifactId" input string.
@@ -34,14 +32,16 @@ export const mavenAdapter: RegistryAdapter = {
   ],
   parserType: "zip",
   metaFileName: "pom.xml",
-  metadataNeedsCors: true,
-  archiveNeedsCors: true,
+
+  get metadataNeedsCors() { return getCorsFlags("maven").metadataNeedsCors; },
+  get archiveNeedsCors() { return getCorsFlags("maven").archiveNeedsCors; },
 
   async fetchPackageInfo(input: string): Promise<RegistryPackageInfo> {
     const { groupId, artifactId } = parseGAV(input);
+    const search = getRegistryUrl("maven");
 
     // Search for the artifact
-    const searchUrl = `${MAVEN_SEARCH}?q=g:${encodeURIComponent(groupId)}+AND+a:${encodeURIComponent(artifactId)}&rows=1&wt=json`;
+    const searchUrl = `${search}?q=g:${encodeURIComponent(groupId)}+AND+a:${encodeURIComponent(artifactId)}&rows=1&wt=json`;
     const searchRes = await corsFetch(searchUrl, this.metadataNeedsCors);
 
     if (!searchRes.ok) {
@@ -65,7 +65,7 @@ export const mavenAdapter: RegistryAdapter = {
     // Fetch version list
     let versions: string[] = [latestVersion];
     try {
-      const versionsUrl = `${MAVEN_SEARCH}?q=g:${encodeURIComponent(groupId)}+AND+a:${encodeURIComponent(artifactId)}&core=gav&rows=50&wt=json`;
+      const versionsUrl = `${search}?q=g:${encodeURIComponent(groupId)}+AND+a:${encodeURIComponent(artifactId)}&core=gav&rows=50&wt=json`;
       const versionsRes = await corsFetch(
         versionsUrl,
         this.metadataNeedsCors,
@@ -84,8 +84,9 @@ export const mavenAdapter: RegistryAdapter = {
     }
 
     // Build download URL
+    const repo = getSecondaryUrl("maven");
     const groupPath = groupId.replace(/\./g, "/");
-    const tarballUrl = `${MAVEN_REPO}/${groupPath}/${artifactId}/${latestVersion}/${artifactId}-${latestVersion}.jar`;
+    const tarballUrl = `${repo}/${groupPath}/${artifactId}/${latestVersion}/${artifactId}-${latestVersion}.jar`;
 
     return {
       name: `${groupId}:${artifactId}`,
@@ -98,8 +99,9 @@ export const mavenAdapter: RegistryAdapter = {
 
   async fetchVersionInfo(input: string, version: string): Promise<RegistryPackageInfo> {
     const { groupId, artifactId } = parseGAV(input);
+    const repo = getSecondaryUrl("maven");
     const groupPath = groupId.replace(/\./g, "/");
-    const tarballUrl = `${MAVEN_REPO}/${groupPath}/${artifactId}/${version}/${artifactId}-${version}.jar`;
+    const tarballUrl = `${repo}/${groupPath}/${artifactId}/${version}/${artifactId}-${version}.jar`;
 
     return {
       name: `${groupId}:${artifactId}`,

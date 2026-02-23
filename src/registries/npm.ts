@@ -5,8 +5,7 @@ import type {
   PackageInfo,
 } from "../types";
 import { corsFetch } from "../lib/cors";
-
-const NPM_REGISTRY = "https://registry.npmjs.org";
+import { getRegistryUrl, getCorsFlags } from "../lib/settings";
 
 export const npmAdapter: RegistryAdapter = {
   id: "npm",
@@ -15,11 +14,13 @@ export const npmAdapter: RegistryAdapter = {
   examples: ["lodash", "react", "express", "@babel/core"],
   parserType: "tgz",
   metaFileName: "package.json",
-  metadataNeedsCors: false,
-  archiveNeedsCors: false,
+
+  get metadataNeedsCors() { return getCorsFlags("npm").metadataNeedsCors; },
+  get archiveNeedsCors() { return getCorsFlags("npm").archiveNeedsCors; },
 
   async fetchPackageInfo(name: string): Promise<RegistryPackageInfo> {
-    const url = `${NPM_REGISTRY}/${encodeURIComponent(name).replace("%40", "@").replace("%2F", "/")}`;
+    const registry = getRegistryUrl("npm");
+    const url = `${registry}/${encodeURIComponent(name).replace("%40", "@").replace("%2F", "/")}`;
     const res = await corsFetch(url, this.metadataNeedsCors);
 
     if (!res.ok) {
@@ -48,7 +49,8 @@ export const npmAdapter: RegistryAdapter = {
   },
 
   async fetchVersionInfo(name: string, version: string): Promise<RegistryPackageInfo> {
-    const url = `${NPM_REGISTRY}/${encodeURIComponent(name).replace("%40", "@").replace("%2F", "/")}/${version}`;
+    const registry = getRegistryUrl("npm");
+    const url = `${registry}/${encodeURIComponent(name).replace("%40", "@").replace("%2F", "/")}/${version}`;
     const res = await corsFetch(url, this.metadataNeedsCors);
 
     if (!res.ok) {

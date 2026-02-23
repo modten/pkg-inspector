@@ -5,8 +5,7 @@ import type {
   PackageInfo,
 } from "../types";
 import { corsFetch } from "../lib/cors";
-
-const PYPI_API = "https://pypi.org/pypi";
+import { getRegistryUrl, getCorsFlags } from "../lib/settings";
 
 export const pypiAdapter: RegistryAdapter = {
   id: "pypi",
@@ -15,11 +14,13 @@ export const pypiAdapter: RegistryAdapter = {
   examples: ["requests", "flask", "numpy", "django"],
   parserType: "tgz",
   metaFileName: "PKG-INFO",
-  metadataNeedsCors: false,
-  archiveNeedsCors: true,
+
+  get metadataNeedsCors() { return getCorsFlags("pypi").metadataNeedsCors; },
+  get archiveNeedsCors() { return getCorsFlags("pypi").archiveNeedsCors; },
 
   async fetchPackageInfo(name: string): Promise<RegistryPackageInfo> {
-    const url = `${PYPI_API}/${encodeURIComponent(name)}/json`;
+    const api = getRegistryUrl("pypi");
+    const url = `${api}/${encodeURIComponent(name)}/json`;
     const res = await corsFetch(url, this.metadataNeedsCors);
 
     if (!res.ok) {
@@ -54,7 +55,8 @@ export const pypiAdapter: RegistryAdapter = {
   },
 
   async fetchVersionInfo(name: string, version: string): Promise<RegistryPackageInfo> {
-    const url = `${PYPI_API}/${encodeURIComponent(name)}/${version}/json`;
+    const api = getRegistryUrl("pypi");
+    const url = `${api}/${encodeURIComponent(name)}/${version}/json`;
     const res = await corsFetch(url, this.metadataNeedsCors);
 
     if (!res.ok) {
