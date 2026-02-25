@@ -137,11 +137,13 @@ func (sr *streamReader) Close() error {
 }
 
 // ---------------------------------------------------------------------------
-// jsFetch: call window.fetch(url) from Go via syscall/js, return a
-// streaming io.ReadCloser over the response body.
+// jsFetch: call window.fetch(url) or window.fetch(url, options) from Go via
+// syscall/js, return a streaming io.ReadCloser over the response body.
+// options is a JS object with optional properties like headers, credentials, etc.
+// Pass nil/undefined/null for options to use default fetch behavior.
 // ---------------------------------------------------------------------------
 
-func jsFetch(url string) (io.ReadCloser, int, error) {
+func jsFetch(url string, options js.Value) (io.ReadCloser, int, error) {
 	ch := make(chan struct{})
 	var response js.Value
 	var fetchErr error
@@ -159,7 +161,12 @@ func jsFetch(url string) (io.ReadCloser, int, error) {
 	defer thenCb.Release()
 	defer catchCb.Release()
 
-	promise := js.Global().Call("fetch", url)
+	var promise js.Value
+	if !options.IsUndefined() && !options.IsNull() {
+		promise = js.Global().Call("fetch", url, options)
+	} else {
+		promise = js.Global().Call("fetch", url)
+	}
 	promise.Call("then", thenCb).Call("catch", catchCb)
 	<-ch
 
@@ -177,7 +184,6 @@ func jsFetch(url string) (io.ReadCloser, int, error) {
 	contentLength := 0
 	clHeader := response.Get("headers").Call("get", "content-length")
 	if !clHeader.IsNull() && !clHeader.IsUndefined() {
-		// Ignore parse errors — content-length is advisory.
 		cl := clHeader.String()
 		for _, c := range cl {
 			if c >= '0' && c <= '9' {
@@ -491,13 +497,14 @@ func main() {
 	}))
 
 	// -----------------------------------------------------------------------
-	// __wasm_fetchAndParseTgz(url: string) -> Promise<string>
+	// __wasm_fetchAndParseTgz(url: string, options?: object) -> Promise<string>
 	// Phase 1: fetch via streaming, decompress, parse — no JS-side
 	// ArrayBuffer copy. Returns JSON ParseResult.
+	// options: { headers?: Record<string, string>, credentials?: string, ... }
 	// -----------------------------------------------------------------------
 	js.Global().Set("__wasm_fetchAndParseTgz", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) != 1 {
-			return jsError("fetchAndParseTgz requires exactly 1 argument (url)")
+		if len(args) < 1 || len(args) > 2 {
+			return jsError("fetchAndParseTgz requires 1 or 2 arguments (url, options?)")
 		}
 
 		handler := js.FuncOf(func(_ js.Value, promise []js.Value) any {
@@ -506,8 +513,12 @@ func main() {
 
 			go func() {
 				url := args[0].String()
+				var options js.Value
+				if len(args) == 2 && !args[1].IsUndefined() && !args[1].IsNull() {
+					options = args[1]
+				}
 
-				body, _, err := jsFetch(url)
+				body, _, err := jsFetch(url, options)
 				if err != nil {
 					reject.Invoke(js.Global().Get("Error").New("Fetch failed: " + err.Error()))
 					return
@@ -554,7 +565,7 @@ func main() {
 				url := args[0].String()
 				onChunk := args[1]
 
-				body, _, err := jsFetch(url)
+				body, _, err := jsFetch(url, js.Undefined())
 				if err != nil {
 					reject.Invoke(js.Global().Get("Error").New("Fetch failed: " + err.Error()))
 					return
