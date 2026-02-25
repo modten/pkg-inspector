@@ -547,14 +547,15 @@ func main() {
 	}))
 
 	// -----------------------------------------------------------------------
-	// __wasm_indexTgz(url: string, onChunk: Function) -> Promise<string>
+	// __wasm_indexTgz(url: string, onChunk: Function, options?: object) -> Promise<string>
 	// Phase 2 lazy-loading: fetch, decompress, stream uncompressed tar
 	// chunks to JS via onChunk(Uint8Array), build a file index with
 	// byte offsets. Returns JSON IndexResult (no file content).
+	// options: { headers?: Record<string, string>, credentials?: string, ... }
 	// -----------------------------------------------------------------------
 	js.Global().Set("__wasm_indexTgz", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) != 2 {
-			return jsError("indexTgz requires 2 arguments (url, onChunk)")
+		if len(args) < 2 || len(args) > 3 {
+			return jsError("indexTgz requires 2 or 3 arguments (url, onChunk, options?)")
 		}
 
 		handler := js.FuncOf(func(_ js.Value, promise []js.Value) any {
@@ -564,8 +565,12 @@ func main() {
 			go func() {
 				url := args[0].String()
 				onChunk := args[1]
+				var options js.Value
+				if len(args) == 3 && !args[2].IsUndefined() && !args[2].IsNull() {
+					options = args[2]
+				}
 
-				body, _, err := jsFetch(url, js.Undefined())
+				body, _, err := jsFetch(url, options)
 				if err != nil {
 					reject.Invoke(js.Global().Get("Error").New("Fetch failed: " + err.Error()))
 					return
